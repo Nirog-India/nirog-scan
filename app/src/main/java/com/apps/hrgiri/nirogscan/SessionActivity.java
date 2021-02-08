@@ -95,8 +95,8 @@ public class SessionActivity extends AppCompatActivity {
 
     // ----------------------------------- SOCKET --------------------------------------------------//
 //    private String SERVER_IP = "192.168.43.188";              // For Realme
-//    private String SERVER_IP = "192.168.1.101";                 // For JioFi
-    private String SERVER_IP = "192.168.4.1";                 // For ESP
+    private String SERVER_IP = "192.168.1.101";                 // For JioFi
+//    private String SERVER_IP = "192.168.4.1";                 // For ESP
     private int SERVER_PORT = 80;
     private boolean isConnected = false;
 
@@ -870,8 +870,8 @@ public class SessionActivity extends AppCompatActivity {
                     addToQueue(DETAILS_STRING,JSONify(DETAILS_STRING,employeeDetails.toString()));
                     displayOnScreen("Session Started!",getColor(android.R.color.holo_green_dark));
                     displayOnLogScreen("Connected\n" +
-                            "Guest Name: " + employeeName +
-                            "\nEnter WiFi credentials for internet connectivity and press CONFIGURE\n");
+                            "Guest Name: " + employeeName); //+
+//                            "\nEnter WiFi credentials for internet connectivity and press CONFIGURE\n");
                     setCurrentStage(Stage.Thermometer);
                     err = false;
                 } catch (IOException e) {
@@ -897,7 +897,7 @@ public class SessionActivity extends AppCompatActivity {
 //                    messageBox.setText("Not connected to any server");
 //                }
 //            });
-            startActivity(new Intent(getApplicationContext(),MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
+            startActivity(new Intent(getApplicationContext(),Scanner.class).setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
             finish();
         }
     }
