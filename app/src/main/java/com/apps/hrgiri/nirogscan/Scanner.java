@@ -100,7 +100,14 @@ public class Scanner extends AppCompatActivity {
         codeScanner.releaseResources();
         super.onPause();
     }
-/*
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        codeScanner.startPreview();
+    }
+
+    /*
     private void connectToWifi(String networkSSID,String networkPass){
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
             connectToWifiNew(networkSSID, networkPass);

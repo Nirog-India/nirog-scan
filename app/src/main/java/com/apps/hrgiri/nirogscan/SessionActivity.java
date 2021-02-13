@@ -6,6 +6,7 @@ import android.content.res.ColorStateList;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
+import android.speech.tts.TextToSpeech;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -47,6 +48,7 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Calendar;
 import java.util.LinkedList;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.Random;
 
@@ -95,8 +97,8 @@ public class SessionActivity extends AppCompatActivity {
 
     // ----------------------------------- SOCKET --------------------------------------------------//
 //    private String SERVER_IP = "192.168.43.188";              // For Realme
-    private String SERVER_IP = "192.168.1.101";                 // For JioFi
-//    private String SERVER_IP = "192.168.4.1";                 // For ESP
+//    private String SERVER_IP = "192.168.1.101";                 // For JioFi
+    private String SERVER_IP = "192.168.4.1";                 // For ESP
     private int SERVER_PORT = 80;
     private boolean isConnected = false;
 
@@ -135,6 +137,8 @@ public class SessionActivity extends AppCompatActivity {
     private String employeePhone;
 
     private JSONObject employeeDetails;
+
+    private TextToSpeech textToSpeech;
     // ---------------------------------------------------------------------------------------------//
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -178,7 +182,16 @@ public class SessionActivity extends AppCompatActivity {
 
         new Thread(new UIThread()).start();
         // Connect to server socket
-        new Thread(new ConnectThread()).start();
+        textToSpeech = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int status) {
+                if(status != TextToSpeech.ERROR) {
+                    textToSpeech.setLanguage(Locale.ENGLISH);
+                    new Thread(new ConnectThread()).start();
+                }
+            }
+        });
+
     }
 
     // ---------------------------------------------------------------------------------------------//
@@ -547,6 +560,7 @@ public class SessionActivity extends AppCompatActivity {
 
         switch (stage){
             case Thermometer:
+                textToSpeech.speak("Reading temperature.",TextToSpeech.QUEUE_FLUSH,null,"TTS#4");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -558,6 +572,7 @@ public class SessionActivity extends AppCompatActivity {
                 break;
 
             case Oxymeter:
+                textToSpeech.speak("Reading heart rate and S P O 2.",TextToSpeech.QUEUE_FLUSH,null,"TTS#5");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -608,10 +623,76 @@ public class SessionActivity extends AppCompatActivity {
                 mScrollView.fullScroll(ScrollView.FOCUS_DOWN);
             }
         });
+
         displayOnScreen("Please Wait");
         startReadTime = Calendar.getInstance().getTimeInMillis();
         startOxyFNPTime = Calendar.getInstance().getTimeInMillis();
         isWait = true;
+    }
+
+    private void sendInstruction(){
+        String code = "";
+        switch (currentStage){
+            case Thermometer:
+                code = THERMO_STRING;
+                break;
+            case Oxymeter:
+                code = OXY_STRING;
+                break;
+            case Completed:
+                code = DISCONNECT_STRING;
+                break;
+            case Fin:
+                Context context = getApplicationContext();
+                String filename = Constants.logFilename;
+                File file = new File(context.getFilesDir(), filename);
+
+                logContents += "\n\n\n";
+                try (FileOutputStream fos = new FileOutputStream(file,true)) {
+                    fos.write(logContents.getBytes());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(getApplicationContext(),"Log saved!",Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    displayOnLogScreen(e.toString());
+                }
+
+                if(employeeDetails.has(TEMPERATURE_STRING) && employeeDetails.has(SPO_STRING) && employeeDetails.has(HR_STRING)) {
+                    File file1 = new File(context.getFilesDir(), Constants.historyFilename);
+                    try (FileOutputStream fos = new FileOutputStream(file1, true)) {
+                        Calendar calendar = Calendar.getInstance();
+                        String time = "" + calendar.get(Calendar.DAY_OF_MONTH) + "/"
+                                + (calendar.get(Calendar.MONTH) + 1) + "/"
+                                + calendar.get(Calendar.YEAR) + "  "
+                                + calendar.get(Calendar.HOUR_OF_DAY) + ":"
+                                + calendar.get(Calendar.MINUTE);
+                        Log.d("TIME", time);
+                        employeeDetails.put(LAST_READ_STRING, time);
+                        fos.write(employeeDetails.toString().getBytes());
+                        fos.write(10);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(getApplicationContext(), "Reading saved to device!", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    } catch (IOException | JSONException e) {
+                        e.printStackTrace();
+                        displayOnLogScreen(e.toString());
+                    }
+                }
+
+                isConnected = false;
+                new Thread(new DisconnectThread()).start();
+        }
+        String message = JSONify(code,"");
+        if(!message.isEmpty()){
+            addToQueue(code,message);
+        }
     }
     // ---------------------------------------------------------------------------------------------//
 
@@ -868,11 +949,14 @@ public class SessionActivity extends AppCompatActivity {
 
                     // Send Employee Details
                     addToQueue(DETAILS_STRING,JSONify(DETAILS_STRING,employeeDetails.toString()));
+                    textToSpeech.speak("Welcome to Neerog Scan App!",TextToSpeech.QUEUE_FLUSH,null,"TTS#1");
                     displayOnScreen("Session Started!",getColor(android.R.color.holo_green_dark));
                     displayOnLogScreen("Connected\n" +
                             "Guest Name: " + employeeName); //+
 //                            "\nEnter WiFi credentials for internet connectivity and press CONFIGURE\n");
-                    setCurrentStage(Stage.Thermometer);
+//                    setCurrentStage(Stage.Thermometer);
+                    setCurrentStage(Stage.Oxymeter);
+                    sendInstruction();
                     err = false;
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -897,7 +981,7 @@ public class SessionActivity extends AppCompatActivity {
 //                    messageBox.setText("Not connected to any server");
 //                }
 //            });
-            startActivity(new Intent(getApplicationContext(),Scanner.class).setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
+//            startActivity(new Intent(getApplicationContext(),Scanner.class).setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
             finish();
         }
     }
@@ -971,11 +1055,13 @@ public class SessionActivity extends AppCompatActivity {
                                                     }
                                                 });
                                                 displayOnScreen("Please try again",getColor(Constants.TEXT_COLOR_RED));
+                                                sendInstruction();
                                             }
                                             break;
                                         case ERR_OXY_FNP:
                                             startReadTime = Calendar.getInstance().getTimeInMillis();
                                             startOxyFNPTime = Calendar.getInstance().getTimeInMillis();
+                                            textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_FLUSH,null,"TTS#2");
                                             displayOnScreen("Please place your finger on the sensor!",getColor(Constants.TEXT_COLOR_RED));
                                             break;
                                         default:
@@ -1002,11 +1088,13 @@ public class SessionActivity extends AppCompatActivity {
                                             tempImg.setVisibility(View.VISIBLE);
                                         }
                                     });
-                                    setCurrentStage(Stage.Oxymeter);
+//                                    setCurrentStage(Stage.Oxymeter);
+                                    setCurrentStage(Stage.Completed);
                                     sentCode = ERR_OK;
                                     employeeDetails.put(TEMPERATURE_STRING,temperature);
                                     APIlib.getInstance().setActiveAnyChartView(tempChartView);
                                     linearGauge.data(new SingleValueDataSet(new Double[] { temperature }));
+                                    sendInstruction();
                                     break;
 
                                 case OXY_STRING:
@@ -1071,7 +1159,8 @@ public class SessionActivity extends AppCompatActivity {
                                             oxyImg.setVisibility(View.VISIBLE);
                                         }
                                     });
-                                    setCurrentStage(Stage.Completed);
+//                                    setCurrentStage(Stage.Completed);
+                                    setCurrentStage(Stage.Thermometer);
                                     sentCode = ERR_OK;
                                     employeeDetails.put(SPO_STRING,spo);
                                     employeeDetails.put(HR_STRING,heart_rate);
@@ -1084,6 +1173,7 @@ public class SessionActivity extends AppCompatActivity {
                                     circularGaugeOxy.data(new SingleValueDataSet(new Double[] { spo }));
                                     circularGaugeOxy.label(1)
                                             .text("<span style=\"font-size: 15\">" + spo + "</span>");
+                                    sendInstruction();
                                     break;
                                 case WIFI_STRING:
                                     message = data_json.getString(MESSAGE_STRING);
@@ -1108,10 +1198,12 @@ public class SessionActivity extends AppCompatActivity {
                                             + "\nHeart Rate: " + jsonObject.getDouble(HR_STRING) + " bpm"
                                             + "\nOxygen Saturation: " + jsonObject.getDouble(SPO_STRING) + "%";
 
+                                    textToSpeech.speak("Completed! Thank you for your time.",TextToSpeech.QUEUE_FLUSH,null,"TTS#3");
                                     displayOnScreen("Done!\nPress \"End Session\" to exit.",getColor(Constants.TEXT_COLOR_GREEN));
                                     setCurrentStage(Stage.Fin);
                                     sentCode = ERR_OK;
                                     isConnected = false;
+                                    sendInstruction();
                                     break;
                                 case PING_STRING:
 //                                message = data_json.toString();
