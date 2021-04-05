@@ -3,9 +3,13 @@ package com.apps.hrgiri.nirogscan;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.media.MediaPlayer;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Debug;
 import android.speech.tts.TextToSpeech;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -14,9 +18,11 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
 import com.anychart.APIlib;
 import com.anychart.AnyChart;
@@ -32,7 +38,6 @@ import com.anychart.scales.Base;
 import com.anychart.scales.Linear;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -41,7 +46,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.text.DecimalFormat;
@@ -57,7 +61,7 @@ public class SessionActivity extends AppCompatActivity {
     private enum Stage {
         NotConnected,
         Thermometer,
-        Oxymeter,
+        Reading,
         Completed,
         Fin
     }
@@ -91,14 +95,17 @@ public class SessionActivity extends AppCompatActivity {
     private static final String OXY_ACC_STRING = Constants.OXY_ACC_STRING;
     private static final String HR_PREC_STRING = Constants.HR_PREC_STRING;
     private static final String LAST_READ_STRING = Constants.LAST_READ_STRING;
+    private static final String READ_STRING = Constants.READING_STRING;
     // ---------------------------------------------------------------------------------------------//
 
     // --------------------------------------------------------------------- VARIABLES ----------------------------------------------------------------------------//
 
     // ----------------------------------- SOCKET --------------------------------------------------//
-//    private String SERVER_IP = "192.168.43.188";              // For Realme
+    private String SERVER_IP = "192.168.43.188";              // For Realme
 //    private String SERVER_IP = "192.168.1.101";                 // For JioFi
-    private String SERVER_IP = "192.168.4.1";                 // For ESP
+//    private String SERVER_IP = "192.168.43.161";                 // For Redmi
+//    private String SERVER_IP = "192.168.146.161";               // For Galaxy M21
+//    private String SERVER_IP = "192.168.4.1";                 // For ESP
     private int SERVER_PORT = 80;
     private boolean isConnected = false;
 
@@ -139,6 +146,10 @@ public class SessionActivity extends AppCompatActivity {
     private JSONObject employeeDetails;
 
     private TextToSpeech textToSpeech;
+
+    private LinearLayout ll5;
+    private VideoView mVideoView;
+    private boolean stopVideo = false;
     // ---------------------------------------------------------------------------------------------//
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -148,6 +159,7 @@ public class SessionActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_session);
+
 
         messageQueue = new LinkedList<>();
 
@@ -192,6 +204,22 @@ public class SessionActivity extends AppCompatActivity {
             }
         });
 
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+
+        releasePlayer();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            mVideoView.pause();
+        }
     }
 
     // ---------------------------------------------------------------------------------------------//
@@ -536,6 +564,10 @@ public class SessionActivity extends AppCompatActivity {
                 });
                 setWait("Server connecting to WiFi network.\nPlease Wait");
                 break;
+            case READ_STRING:
+                sentCode = code;
+                setWait("Please Wait");
+                break;
             case THERMO_STRING:
                 sentCode = code;
                 setWait("Please Wait");
@@ -571,8 +603,8 @@ public class SessionActivity extends AppCompatActivity {
                 });
                 break;
 
-            case Oxymeter:
-                textToSpeech.speak("Reading heart rate and S P O 2.",TextToSpeech.QUEUE_FLUSH,null,"TTS#5");
+            case Reading:
+//                textToSpeech.speak("Reading heart rate and S P O 2.",TextToSpeech.QUEUE_FLUSH,null,"TTS#5");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -636,8 +668,8 @@ public class SessionActivity extends AppCompatActivity {
             case Thermometer:
                 code = THERMO_STRING;
                 break;
-            case Oxymeter:
-                code = OXY_STRING;
+            case Reading:
+                code = READ_STRING;
                 break;
             case Completed:
                 code = DISCONNECT_STRING;
@@ -694,6 +726,33 @@ public class SessionActivity extends AppCompatActivity {
             addToQueue(code,message);
         }
     }
+
+    private void initializePlayer(final String mediaName) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Uri videoUri = getMedia(mediaName);
+                mVideoView.setVideoURI(videoUri);
+                mVideoView.start();
+                stopVideo = false;
+            }
+        });
+    }
+
+    private void releasePlayer() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mVideoView.stopPlayback();
+                stopVideo = true;
+            }
+        });
+    }
+
+    private Uri getMedia(String mediaName) {
+        return Uri.parse("android.resource://" + getPackageName() +
+                "/raw/" + mediaName);
+    }
     // ---------------------------------------------------------------------------------------------//
 
     // ----------------------------------- THREADS -------------------------------------------------//
@@ -707,7 +766,7 @@ public class SessionActivity extends AppCompatActivity {
             configButton = findViewById(R.id.configure_button);
             etSSID = findViewById(R.id.et_ssid);
             etPass = findViewById(R.id.et_pass);
-            mScrollView = findViewById(R.id.scrollview);
+            mScrollView = findViewById(R.id.log_display_scrollview);
             nameView = findViewById(R.id.name_view);
             infoDisplayView = findViewById(R.id.tv_info_display);
 
@@ -720,6 +779,17 @@ public class SessionActivity extends AppCompatActivity {
             tempPrecView = findViewById(R.id.temp_prec_val);
             hrPrecView = findViewById(R.id.hr_prec_val);
             oxyPrecView = findViewById(R.id.oxy_prec_val);
+
+            ll5 = findViewById(R.id.LL5);
+
+            mVideoView = findViewById(R.id.videoView);
+            mVideoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mediaPlayer) {
+                    if(!stopVideo)
+                        mVideoView.start();
+                }
+            });
 
             defaultColors = infoDisplayView.getTextColors();
 
@@ -740,7 +810,7 @@ public class SessionActivity extends AppCompatActivity {
                         case Thermometer:
                             code = THERMO_STRING;
                             break;
-                        case Oxymeter:
+                        case Reading:
                             code = OXY_STRING;
                             break;
                         case Completed:
@@ -795,7 +865,7 @@ public class SessionActivity extends AppCompatActivity {
                 public void onClick(View v) {
                     String code = "";
                     switch (currentStage){
-                        case Oxymeter:
+                        case Reading:
                             code = THERMO_STRING;
                             break;
                         case Completed:
@@ -873,15 +943,19 @@ public class SessionActivity extends AppCompatActivity {
                     }
                     displayOnLogScreen(".");
                     Log.d("Code",sentCode);
-                    if(sentCode.equals(OXY_STRING)){
+                    if(sentCode.equals(READ_STRING)){
                         time_diff = Calendar.getInstance().getTimeInMillis() - startOxyFNPTime;
                         if(time_diff > FNP_TIMEOUT){
                             displayOnScreen("Reading. Please Wait.");
+                            Log.d("VIDEO","Here");
+                            releasePlayer();
+                            initializePlayer(Constants.SCANNING_FILENAME);
                         }
                     }
 //                    startConnectionTime = Calendar.getInstance().getTimeInMillis();
                 }
                 if(isConnected){
+
                     final long time_diff = Calendar.getInstance().getTimeInMillis() - startConnectionTime;
 //                    displayOnLogScreen("\nTime Diff = "+time_diff);
                     if(time_diff > PING_TIMEOUT){
@@ -950,13 +1024,15 @@ public class SessionActivity extends AppCompatActivity {
                     // Send Employee Details
                     addToQueue(DETAILS_STRING,JSONify(DETAILS_STRING,employeeDetails.toString()));
                     textToSpeech.speak("Welcome to Neerog Scan App!",TextToSpeech.QUEUE_FLUSH,null,"TTS#1");
+                    textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_ADD,null,"TTS#2");
                     displayOnScreen("Session Started!",getColor(android.R.color.holo_green_dark));
                     displayOnLogScreen("Connected\n" +
                             "Guest Name: " + employeeName); //+
 //                            "\nEnter WiFi credentials for internet connectivity and press CONFIGURE\n");
 //                    setCurrentStage(Stage.Thermometer);
-                    setCurrentStage(Stage.Oxymeter);
+                    setCurrentStage(Stage.Reading);
                     sendInstruction();
+                    initializePlayer(Constants.FINGER_PLACING_FILENAME);
                     err = false;
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -1061,7 +1137,6 @@ public class SessionActivity extends AppCompatActivity {
                                         case ERR_OXY_FNP:
                                             startReadTime = Calendar.getInstance().getTimeInMillis();
                                             startOxyFNPTime = Calendar.getInstance().getTimeInMillis();
-                                            textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_FLUSH,null,"TTS#2");
                                             displayOnScreen("Please place your finger on the sensor!",getColor(Constants.TEXT_COLOR_RED));
                                             break;
                                         default:
@@ -1075,30 +1150,10 @@ public class SessionActivity extends AppCompatActivity {
                                             }
                                     break;
 
-                                case THERMO_STRING:
-                                    temperature = data_json.getDouble(MESSAGE_STRING);
-                                    message = "Your temperature is " + temperature;
-                                    final double temp = temperature;
-                                    displayOnScreen("Success!",getColor(Constants.TEXT_COLOR_GREEN));
-                                    runOnUiThread(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            tempValue.setText("" + temp + "\u2103");
-                                            tempImg.setImageResource(R.drawable.green_tick);
-                                            tempImg.setVisibility(View.VISIBLE);
-                                        }
-                                    });
-//                                    setCurrentStage(Stage.Oxymeter);
-                                    setCurrentStage(Stage.Completed);
-                                    sentCode = ERR_OK;
-                                    employeeDetails.put(TEMPERATURE_STRING,temperature);
-                                    APIlib.getInstance().setActiveAnyChartView(tempChartView);
-                                    linearGauge.data(new SingleValueDataSet(new Double[] { temperature }));
-                                    sendInstruction();
-                                    break;
-
-                                case OXY_STRING:
+                                case READ_STRING:
+                                    releasePlayer();
                                     JSONObject jsonObject = data_json.getJSONObject(MESSAGE_STRING);
+                                    temperature = jsonObject.getDouble(TEMPERATURE_STRING);
                                     heart_rate = jsonObject.getDouble(HR_STRING);
                                     spo = jsonObject.getDouble(SPO_STRING);
                                     double oxy_prec = 100.0,hr_prec = 100.0;
@@ -1120,6 +1175,9 @@ public class SessionActivity extends AppCompatActivity {
                                         bestReading = false;
                                     }
 
+                                    message += "\nYour temperature is " + temperature;
+                                    final double temp = temperature;
+//                                    displayOnScreen("Success!",getColor(Constants.TEXT_COLOR_GREEN));
                                     if(bestReading) displayOnScreen("Success!",getColor(Constants.TEXT_COLOR_GREEN));
                                     else displayOnScreen("A yellow tick indicates the reading might not be accurate.\nTrying again is recommended.");
 
@@ -1127,6 +1185,8 @@ public class SessionActivity extends AppCompatActivity {
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
+                                            mVideoView.setVisibility(View.GONE);
+                                            ll5.setVisibility(View.VISIBLE);
                                             if(hr_precision < 99.0) {
                                                 hrImg.setImageResource(R.drawable.yellow_tick);
                                                 hrPrecView.setText("Confidence:\n" + hr_precision + "%");
@@ -1157,8 +1217,117 @@ public class SessionActivity extends AppCompatActivity {
                                             hrImg.setVisibility(View.VISIBLE);
                                             oxyValue.setText("" + spa + "%");
                                             oxyImg.setVisibility(View.VISIBLE);
+
+                                            tempValue.setText("" + temp + "\u2103");
+                                            tempImg.setImageResource(R.drawable.green_tick);
+                                            tempImg.setVisibility(View.VISIBLE);
                                         }
                                     });
+//                                    setCurrentStage(Stage.Completed);
+//                                    setCurrentStage(Stage.Thermometer);
+                                    sentCode = ERR_OK;
+                                    employeeDetails.put(SPO_STRING,spo);
+                                    employeeDetails.put(HR_STRING,heart_rate);
+                                    APIlib.getInstance().setActiveAnyChartView(heartChartView);
+                                    circularGaugeHR.data(new SingleValueDataSet(new Double[] { heart_rate }));
+                                    circularGaugeHR.label(1)
+                                            .text("<span style=\"font-size: 15\">" + heart_rate + "</span>");
+
+                                    APIlib.getInstance().setActiveAnyChartView(oxyChartView);
+                                    circularGaugeOxy.data(new SingleValueDataSet(new Double[] { spo }));
+                                    circularGaugeOxy.label(1)
+                                            .text("<span style=\"font-size: 15\">" + spo + "</span>");
+                                    setCurrentStage(Stage.Completed);
+                                    sentCode = ERR_OK;
+                                    employeeDetails.put(TEMPERATURE_STRING,temperature);
+                                    APIlib.getInstance().setActiveAnyChartView(tempChartView);
+                                    linearGauge.data(new SingleValueDataSet(new Double[] { temperature }));
+                                    sendInstruction();
+                                    break;
+                                case THERMO_STRING:
+                                    temperature = data_json.getDouble(MESSAGE_STRING);
+                                    message = "Your temperature is " + temperature;
+//                                    final double temp = temperature;
+//                                    displayOnScreen("Success!",getColor(Constants.TEXT_COLOR_GREEN));
+//                                    runOnUiThread(new Runnable() {
+//                                        @Override
+//                                        public void run() {
+//                                            tempValue.setText("" + temp + "\u2103");
+//                                            tempImg.setImageResource(R.drawable.green_tick);
+//                                            tempImg.setVisibility(View.VISIBLE);
+//                                        }
+//                                    });
+//                                    setCurrentStage(Stage.Reading);
+                                    setCurrentStage(Stage.Completed);
+                                    sentCode = ERR_OK;
+                                    employeeDetails.put(TEMPERATURE_STRING,temperature);
+                                    APIlib.getInstance().setActiveAnyChartView(tempChartView);
+                                    linearGauge.data(new SingleValueDataSet(new Double[] { temperature }));
+                                    sendInstruction();
+                                    break;
+
+                                case OXY_STRING:
+                                    jsonObject = data_json.getJSONObject(MESSAGE_STRING);
+                                    heart_rate = jsonObject.getDouble(HR_STRING);
+                                    spo = jsonObject.getDouble(SPO_STRING);
+                                    oxy_prec = 100.0; hr_prec = 100.0;
+                                    try{
+                                        oxy_prec = jsonObject.getDouble(OXY_ACC_STRING);
+                                        hr_prec = jsonObject.getDouble(HR_PREC_STRING);
+                                    }catch (JSONException e){
+                                        e.printStackTrace();
+                                    }
+                                    bestReading = true;
+                                    message = "Your heart rate is " + heart_rate + " bpm";
+                                    if(hr_prec<99.0) {
+                                        message += " with " + hr_prec + "% precision";
+                                        bestReading = false;
+                                    }
+                                    message += " and oxygen saturation is " + spo + "%";
+                                    if(oxy_prec < 98.7) {
+                                        message += " with " + oxy_prec + "% precision";
+                                        bestReading = false;
+                                    }
+
+                                    if(bestReading) displayOnScreen("Success!",getColor(Constants.TEXT_COLOR_GREEN));
+                                    else displayOnScreen("A yellow tick indicates the reading might not be accurate.\nTrying again is recommended.");
+
+//                                    oxy_accuracy = oxy_prec, hr_precision = hr_prec, hr = heart_rate, spa = spo;
+//                                    runOnUiThread(new Runnable() {
+//                                        @Override
+//                                        public void run() {
+//                                            if(hr_precision < 99.0) {
+//                                                hrImg.setImageResource(R.drawable.yellow_tick);
+//                                                hrPrecView.setText("Confidence:\n" + hr_precision + "%");
+//                                            }
+//                                            else {
+//                                                hrImg.setImageResource(R.drawable.green_tick);
+//                                                hrPrecView.setText("");
+//                                            }
+//                                            if(oxy_accuracy < 98.7) {
+//                                                oxyImg.setImageResource(R.drawable.yellow_tick);
+//                                                oxyPrecView.setText("Confidence:\n" + oxy_accuracy + "%");
+//                                            }
+//                                            else {
+//                                                oxyImg.setImageResource(R.drawable.green_tick);
+//                                                oxyPrecView.setText("");
+//                                            }
+//                                            if(hr <= 40){
+//                                                hrImg.setImageResource(R.drawable.yellow_tick);
+//                                                hrPrecView.setText("Confidence:\n" + 10 + "%");
+//                                            }
+//                                            if(spa <= 90){
+//                                                oxyImg.setImageResource(R.drawable.yellow_tick);
+//                                                oxyPrecView.setText("Confidence:\n" + 10 + "%");
+//                                            }
+////                                            hrImg.setImageResource(R.drawable.green_tick);
+////                                            oxyImg.setImageResource((R.drawable.green_tick));
+//                                            hrValue.setText("" + hr + " bpm");
+//                                            hrImg.setVisibility(View.VISIBLE);
+//                                            oxyValue.setText("" + spa + "%");
+//                                            oxyImg.setVisibility(View.VISIBLE);
+//                                        }
+//                                    });
 //                                    setCurrentStage(Stage.Completed);
                                     setCurrentStage(Stage.Thermometer);
                                     sentCode = ERR_OK;
@@ -1199,7 +1368,13 @@ public class SessionActivity extends AppCompatActivity {
                                             + "\nOxygen Saturation: " + jsonObject.getDouble(SPO_STRING) + "%";
 
                                     textToSpeech.speak("Completed! Thank you for your time.",TextToSpeech.QUEUE_FLUSH,null,"TTS#3");
-                                    displayOnScreen("Done!\nPress \"End Session\" to exit.",getColor(Constants.TEXT_COLOR_GREEN));
+                                    displayOnScreen("Done!",getColor(Constants.TEXT_COLOR_GREEN));
+                                    try {
+                                        Thread.sleep(5000);
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                        displayOnLogScreen(e.toString());
+                                    }
                                     setCurrentStage(Stage.Fin);
                                     sentCode = ERR_OK;
                                     isConnected = false;
@@ -1241,7 +1416,7 @@ public class SessionActivity extends AppCompatActivity {
 //                        new Thread(new Thread1()).start();
 //                        return;
                     }
-                } catch (SocketException | UnsupportedEncodingException e){
+                } catch (SocketException e){
                     displayOnLogScreen(e.toString());
 //                    new Thread(new ConnectThread()).start();
 //                    return;

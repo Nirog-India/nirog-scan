@@ -50,14 +50,20 @@ public class MainActivity extends AppCompatActivity {
     private final int MY_PERMISSIONS_ACCESS_COARSE_LOCATION = 1;
     private BroadcastReceiver wifiScanReceiver;
 
-//    private String espSSID = "Realme C1";
-//    private String espPassword = "12345677";
+    private String espSSID = "Realme C1";
+    private String espPassword = "12345677";
 
 //    private String espSSID = "JioFi2_053A3F";
 //    private String espPassword = "erxyd3y86s";
 
-    private String espSSID = "Covid";
-    private String espPassword = "password";
+//    private String espSSID = "Redmi";
+//    private String espPassword = "RedLips1234";
+
+//    private String espSSID = "Galaxy M219227";
+//    private String espPassword = "itsx9137";
+
+//    private String espSSID = "Covid";
+//    private String espPassword = "password";
 
     private Context context = MainActivity.this;
 

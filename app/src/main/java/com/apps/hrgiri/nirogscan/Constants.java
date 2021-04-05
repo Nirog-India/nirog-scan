@@ -12,6 +12,9 @@ public class Constants {
     public static final String logFilename = "logfile";
     public static final String historyFilename = "historyfile";
 
+    public static final String FINGER_PLACING_FILENAME = "finger_placing";
+    public static final String SCANNING_FILENAME = "scanning";
+
 
     public static final String TEMPERATURE_STRING = "TEMPERATURE";
     public static final String HR_STRING = "HR";
@@ -22,4 +25,5 @@ public class Constants {
     public static final String OXY_ACC_STRING = "SPO_ERR";
     public static final String HR_PREC_STRING = "HR_ERR";
     public static final String LAST_READ_STRING = "LAST_READ";
+    public static final String READING_STRING = "TAKE_READING";
 }
