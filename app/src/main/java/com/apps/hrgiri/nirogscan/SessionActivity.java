@@ -70,7 +70,9 @@ import static com.apps.hrgiri.nirogscan.Constants.SERVICE_UUID;
 public class SessionActivity extends AppCompatActivity implements BtControllerCallback {
 
     // ----------------------------------- CONSTANTS --------------------------------------------------//
+    public static final long PING_TIMEOUT = 20000;
     public static final long READ_TIMEOUT = 35000;
+    public static final String END_OF_MESSAGE = "_EOM_";
 
     private static final String OXY_STRING = "OXYMETER";
     private static final String THERMO_STRING = "THERMOMETER";
@@ -424,9 +426,9 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
                             }
                         });
 
-                        employeeDetails.put(SPO_STRING, spo);
-                        employeeDetails.put(HR_STRING, heart_rate);
-                        employeeDetails.put(TEMPERATURE_STRING, temperature);
+                        employeeDetails.put(SPO_STRING, spo1);
+                        employeeDetails.put(HR_STRING, heart_rate1);
+                        employeeDetails.put(TEMPERATURE_STRING, temperature1);
 
                         // For displaying charts (currently hidden)
                         APIlib.getInstance().setActiveAnyChartView(heartChartView);
