@@ -26,4 +26,9 @@ public class Constants {
     public static final String HR_PREC_STRING = "HR_ERR";
     public static final String LAST_READ_STRING = "LAST_READ";
     public static final String READING_STRING = "TAKE_READING";
+
+    public static final String SERVICE_UUID = "0000aa-0000-1000-8000-00805f9b34fb";
+    public static final String READ_CHARACTERISTIC_UUID = "0000aa01-0000-1000-8000-00805f9b34fb";
+    public static final String FNP_CHARACTERISTIC_UUID = "0000aa02-0000-1000-8000-00805f9b34fb";
+    public static final String BATTERY_CHARACTERISTIC_UUID = "0000aa03-0000-1000-8000-00805f9b34fb";
 }

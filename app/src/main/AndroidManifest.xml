@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
@@ -30,8 +32,7 @@
         <activity android:name=".SessionActivity" />
         <activity android:name=".ViewLogActivity" />
         <activity android:name=".ReadHistoryActivity" />
-        <activity android:name=".ConfigureWifiActivity"></activity>
-    </application
-        >
+        <activity android:name=".ConfigureWifiActivity"/>
+    </application>
 
 </manifest>

@@ -1,6 +1,7 @@
 package com.apps.hrgiri.nirogscan;
 
 import android.annotation.TargetApi;
+import android.bluetooth.BluetoothGattCharacteristic;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -12,9 +13,13 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiNetworkSpecifier;
 import android.os.Build;
+import android.speech.tts.TextToSpeech;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.budiyev.android.codescanner.CodeScanner;
@@ -22,23 +27,28 @@ import com.budiyev.android.codescanner.CodeScannerView;
 import com.budiyev.android.codescanner.DecodeCallback;
 import com.google.zxing.Result;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import static com.apps.hrgiri.nirogscan.Constants.BATTERY_CHARACTERISTIC_UUID;
 
-import java.util.List;
-
-public class Scanner extends AppCompatActivity {
-
-    CodeScanner codeScanner;
-    CodeScannerView codeScannerView;
+public class Scanner extends AppCompatActivity implements BtControllerCallback {
 
     public static final String EXTRA_MESSAGE = "com.apps.hrgiri.nirogscan.EMPLOYEE_DETAILS";
+
+    private BtController btController;
+    private CodeScanner codeScanner;
+
+    private CodeScannerView codeScannerView;
+
+    private ImageView batteryView;
+    private TextView batteryTextView;
 
     private Context context = Scanner.this;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scanner);
+
+        batteryView = findViewById(R.id.iv_battery);
+        batteryTextView = findViewById(R.id.tv_battery);
 
         codeScannerView = findViewById(R.id.code_scanner_view);
         codeScanner = new CodeScanner(this,codeScannerView);
@@ -81,6 +91,7 @@ public class Scanner extends AppCompatActivity {
 
                     Intent intent = new Intent(Scanner.this, SessionActivity.class);
                     intent.putExtra(EXTRA_MESSAGE, message);
+//                    intent.putExtra(MainActivity.EXTRA_OBJECT, getIntent().getSerializableExtra(MainActivity.EXTRA_OBJECT));
                     startActivity(intent);
                 }
                 else {
@@ -93,6 +104,8 @@ public class Scanner extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        btController = BtController.getInstance(); //(BtController) intent.getSerializableExtra(MainActivity.EXTRA_OBJECT);
+        btController.setCallback(this);
         codeScanner.startPreview();
     }
 
@@ -104,91 +117,53 @@ public class Scanner extends AppCompatActivity {
 
     @Override
     protected void onRestart() {
+        btController = BtController.getInstance(); //(BtController) intent.getSerializableExtra(MainActivity.EXTRA_OBJECT);
+        btController.setCallback(this);
         super.onRestart();
         codeScanner.startPreview();
     }
 
-    /*
-    private void connectToWifi(String networkSSID,String networkPass){
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
-            connectToWifiNew(networkSSID, networkPass);
-        }
-        else {
-            WifiConfiguration conf = new WifiConfiguration();
-            conf.SSID = "\"" + networkSSID + "\"";
-            conf.status = WifiConfiguration.Status.DISABLED;
-            conf.priority = 40;
-            conf.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
-            conf.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
-            conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-            conf.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
-            conf.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-            conf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
-            conf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
-            conf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-            conf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-
-            conf.preSharedKey = "\"" + networkPass + "\"";
-
-            WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-            wifiManager.addNetwork(conf);
-            Log.d("CONNECT", "Configuration added");
-            List<WifiConfiguration> list = wifiManager.getConfiguredNetworks();
-            for (WifiConfiguration i : list) {
-                if (i.SSID != null && i.SSID.equals("\"" + networkSSID + "\"")) {
-                    Log.d("CONNECT", "Disconnecting from previous WiFi");
-                    wifiManager.disconnect();
-                    wifiManager.enableNetwork(i.networkId, true);
-                    Log.d("CONNECT", "Reconnecting");
-                    wifiManager.reconnect();
-
-                    break;
-                }
-            }
-
-            //remember id
-//        int netId = wifiManager.addNetwork(conf);
-//        Log.d("CONNECT","Disconnecting from previous WiFi");
-//        wifiManager.disconnect();
-//        wifiManager.enableNetwork(netId, true);
-//        Log.d("CONNECT","Reconnecting");
-//        wifiManager.reconnect();
-        }
+    @Override
+    public void onBtDisconnected() {
+        btController.startBleScan();
     }
 
-    @TargetApi(29)
-    private void connectToWifiNew(String networkSSID, String networkPass){
-        NetworkSpecifier specifier = new WifiNetworkSpecifier.Builder()
-                        .setSsid(networkSSID)
-                        .setWpa2Passphrase(networkPass)
-                        .build();
+    @Override
+    public void onGattReady(){
+    }
+    @Override
+    public void onCharacteristicReadSuccess(BluetoothGattCharacteristic characteristic){
+    }
 
-        final NetworkRequest request =
-                new NetworkRequest.Builder()
-                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                        .setNetworkSpecifier(specifier)
-                        .build();
-        final ConnectivityManager connectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-        final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
+    @Override
+    public void onCharacteristicWriteSuccess(BluetoothGattCharacteristic characteristic) {
+    }
 
-            @Override
-            public void onAvailable(Network network) {
-                Toast.makeText(getApplicationContext(),"Connected!",Toast.LENGTH_LONG).show();
+    @Override
+    public void onCharacteristicNotification(BluetoothGattCharacteristic characteristic) {
+        String message = "";
+        String data = characteristic.getStringValue(0);
+        Log.i("BluetoothGattCallback", "Read characteristic " + characteristic.getUuid() + ":\t" + data);
 
-                Intent intent = new Intent(Scanner.this, SessionActivity.class);
-                JSONObject fakeEmployee = new JSONObject();
-                try {
-                    fakeEmployee.put("NAME","Jane Doe");
-                    fakeEmployee.put("PHONE","999999");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-                intent.putExtra(EXTRA_MESSAGE, fakeEmployee.toString());
-                startActivity(intent);
-            }
-        };
-        connectivityManager.requestNetwork(request, networkCallback);
+        switch (characteristic.getUuid().toString()) {
+            case BATTERY_CHARACTERISTIC_UUID:
+                final int batteryVal = characteristic.getValue()[0];
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        batteryTextView.setText(batteryVal + "%");
+                        if(batteryVal < 25)
+                            batteryView.setImageResource(R.drawable.battery_one_bar);
+                        else if(batteryVal < 50)
+                            batteryView.setImageResource(R.drawable.battery_two_bars);
+                        else if(batteryVal < 75)
+                            batteryView.setImageResource(R.drawable.battery_three_bars);
+                        else
+                            batteryView.setImageResource(R.drawable.battery_full);
+                    }
+                });
+                break;
+        }
 
     }
-    */
 }

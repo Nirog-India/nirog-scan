@@ -15,7 +15,7 @@
         android:textSize="24sp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/iv_battery" />
 
     <Button
         android:id="@+id/scan_qr_button"
@@ -94,5 +94,29 @@
         android:visibility="visible"
         app:layout_constraintBottom_toTopOf="@+id/scan_wifi_button"
         app:layout_constraintStart_toStartOf="parent" />
+
+    <ImageView
+        android:id="@+id/iv_battery"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/battery_default" />
+
+    <TextView
+        android:id="@+id/tv_battery"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="8dp"
+        android:textColor="@android:color/black"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="@+id/iv_battery"
+        app:layout_constraintEnd_toStartOf="@+id/iv_battery"
+        app:layout_constraintTop_toTopOf="@+id/iv_battery"
+        tools:text="100%" />
 
 </android.support.constraint.ConstraintLayout>
