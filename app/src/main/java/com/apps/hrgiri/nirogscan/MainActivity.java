@@ -378,7 +378,11 @@ public class MainActivity extends AppCompatActivity implements BtControllerCallb
             @Override
             public void run() {
                 infoMessageBox.setText("Connected to " + btController.btGatt.getDevice().getName());// + esp.getName());
-                startSeshButton.setEnabled(true);
+//                startSeshButton.setEnabled(true);
+                // Start Session Activity directly
+                Intent intent = new Intent(MainActivity.this, SessionActivity.class);
+//                    intent.putExtra(MainActivity.EXTRA_OBJECT, getIntent().getSerializableExtra(MainActivity.EXTRA_OBJECT));
+                startActivity(intent);
             }
         });
     }

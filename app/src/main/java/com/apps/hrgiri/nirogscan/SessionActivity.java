@@ -60,6 +60,8 @@ import java.text.DecimalFormat;
 import java.util.Calendar;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 
 import static com.apps.hrgiri.nirogscan.Constants.BATTERY_CHARACTERISTIC_UUID;
@@ -136,6 +138,8 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
     private boolean stopVideo = false;
 
     private boolean isReadingCompleted = false;
+
+    private Timer timer;
     // ---------------------------------------------------------------------------------------------//
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -153,9 +157,11 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
         btController.setCallback(this);
 
         // Get the Intent that carries the employee info
-        Intent intent = getIntent();
+//        Intent intent = getIntent();
         try {
-            employeeDetails = new JSONObject(intent.getStringExtra(Scanner.EXTRA_MESSAGE));
+            employeeDetails = new JSONObject(/*intent.getStringExtra(Scanner.EXTRA_MESSAGE)*/);
+            employeeDetails.put(NAME_STRING,"Guest");
+            employeeDetails.put(PHONE_STRING,"xxx xxx xxxx");
             Log.d("INTENT",employeeDetails.toString());
             employeeName = employeeDetails.getString(NAME_STRING);
             employeePhone = employeeDetails.getString(PHONE_STRING);
@@ -174,7 +180,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
 //        }
 //        connectivityManager.bindProcessToNetwork(activeWifiNetwork);
 
-
+        timer = new Timer();
         // For displaying charts (currently hidden)
         setTempVis();
         setHeartRateVis();
@@ -219,7 +225,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                nameView.setText("Name: " + employeeName);
+                nameView.setText("Welcome " + employeeName);
             }
         });
 
@@ -332,25 +338,44 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
                 case FNP_CHARACTERISTIC_UUID:
                     Log.i("BluetoothReceive", "Read characteristic " + characteristic.getUuid() + ":\t" + byteToHex(characteristic.getValue()));
                     if(characteristic.getValue()[0] == 1){
+                        timer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                isReadingCompleted = true;
+                                textToSpeech.stop();
+                                displayOnScreen("Please place your finger on the sensor!",getColor(Constants.TEXT_COLOR_RED));
+                                releasePlayer();
+                                initializePlayer(Constants.FINGER_PLACING_FILENAME);
+                            }
+                        },READ_TIMEOUT);
+
                         fingerNotPlaced = false;
                         textToSpeech.speak("Reading. Please Wait.",TextToSpeech.QUEUE_FLUSH,null,READING_UTTERANCE_ID);
                         displayOnScreen("Reading. Please Wait.");
-                        Log.d("VIDEO","Here");
                         releasePlayer();
                         initializePlayer(Constants.SCANNING_FILENAME);
                     }
                     else{
                         fingerNotPlaced = true;
-                        textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_FLUSH,null,FINGER_PLACE_UTTERANCE_ID);
-                        displayOnScreen("Please place your finger on the sensor!",getColor(Constants.TEXT_COLOR_RED));
-                        releasePlayer();
-                        initializePlayer(Constants.FINGER_PLACING_FILENAME);
+                        if(!isReadingCompleted) {
+                            textToSpeech.speak("Please place your finger on the sensor", TextToSpeech.QUEUE_FLUSH, null, FINGER_PLACE_UTTERANCE_ID);
+                            displayOnScreen("Please place your finger on the sensor!", getColor(Constants.TEXT_COLOR_RED));
+                            releasePlayer();
+                            initializePlayer(Constants.FINGER_PLACING_FILENAME);
+                        }
+                        else {
+                            textToSpeech.stop();
+                            displayOnScreen("Please place your finger on the sensor!",getColor(Constants.TEXT_COLOR_RED));
+                            releasePlayer();
+                            initializePlayer(Constants.FINGER_PLACING_FILENAME);
+                        }
                     }
                     break;
                 case READ_CHARACTERISTIC_UUID:
                     String[] recv_messages = data.split(",", 0);        // The received string is a csv
                     Log.d("LENGTH OF SPLIT", recv_messages.length + "");
                     if(recv_messages.length == 5) {
+                        timer.cancel();
                         isReadingCompleted = true;
                         releasePlayer();
                         double temperature = Float.parseFloat(recv_messages[4]);
@@ -506,7 +531,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
                                     public void onResponse(String response) {
                                         Log.i("HttpResponse", "Response is: "+ response);
                                         Toast.makeText(getApplicationContext(),"Uploaded to the web!",Toast.LENGTH_SHORT).show();
-                                        finish();
+//                                        finish();
                                     }
                                 }, new Response.ErrorListener() {
                             @Override
@@ -514,7 +539,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
                                 Log.i("HttpResponse", "That didn't work!");
                                 error.printStackTrace();
                                 Toast.makeText(getApplicationContext(),"Failed to upload to the web. Cached.",Toast.LENGTH_SHORT).show();
-                                finish();
+//                                finish();
                             }
                         }){
                             @Override
@@ -559,6 +584,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
                         }
 
 //                        finish();
+                        // TODO: start process again
                     }
                     else {
                         Log.e("Received","Invalid format");
@@ -898,7 +924,7 @@ public class SessionActivity extends AppCompatActivity implements BtControllerCa
 
     private void requestReading(){
         textToSpeech.speak("Welcome to Neerog Scan App!",TextToSpeech.QUEUE_FLUSH,null,WELCOME_UTTERANCE_ID);
-        textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_ADD,null,FINGER_PLACE_UTTERANCE_ID);
+        //textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_ADD,null,FINGER_PLACE_UTTERANCE_ID);
         displayOnScreen("Session Started!",getColor(android.R.color.holo_green_dark));
         displayOnLogScreen("Connected\n" +
                 "Guest Name: " + employeeName); //+

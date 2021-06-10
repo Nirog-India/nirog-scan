@@ -1,0 +1,77 @@
+{
+  "project_info": {
+    "project_number": "159033231239",
+    "firebase_url": "https://nirog-test-default-rtdb.firebaseio.com",
+    "project_id": "nirog-test",
+    "storage_bucket": "nirog-test.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159033231239:android:d758142e3fbe416cc8b522",
+        "android_client_info": {
+          "package_name": "com.apps.hrgiri.nirogscan"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "159033231239-0o74hsmr7d51k01lmdvu3ng7777qmjg1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNnesrmRpk7xJ9bEe2B43cke-9pkt0N8I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159033231239-0o74hsmr7d51k01lmdvu3ng7777qmjg1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159033231239:android:68ca0a78d51d8e64c8b522",
+        "android_client_info": {
+          "package_name": "com.example.mynirogscan"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "159033231239-sul4td5iq7elpdmvjp40a6akbqksjldh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.mynirogscan",
+            "certificate_hash": "13705b313a134270ae9a258f987cfcdbd2ce8a15"
+          }
+        },
+        {
+          "client_id": "159033231239-0o74hsmr7d51k01lmdvu3ng7777qmjg1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNnesrmRpk7xJ9bEe2B43cke-9pkt0N8I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159033231239-0o74hsmr7d51k01lmdvu3ng7777qmjg1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -52,7 +52,7 @@ public class Scanner extends AppCompatActivity implements BtControllerCallback {
 
         codeScannerView = findViewById(R.id.code_scanner_view);
         codeScanner = new CodeScanner(this,codeScannerView);
-//        codeScanner.setCamera(CodeScanner.CAMERA_FRONT);
+        codeScanner.setCamera(CodeScanner.CAMERA_FRONT);
 
         codeScanner.setDecodeCallback(new DecodeCallback() {
             @Override
