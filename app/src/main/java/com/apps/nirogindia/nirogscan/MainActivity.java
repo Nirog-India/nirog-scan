@@ -1,7 +1,10 @@
 package com.apps.nirogindia.nirogscan;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
@@ -33,33 +36,51 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.media.MediaPlayer;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
+import android.net.Uri;
 import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiNetworkSpecifier;
 import android.net.wifi.WifiNetworkSuggestion;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.provider.Settings;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -72,11 +93,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
@@ -86,14 +112,19 @@ public class MainActivity extends AppCompatActivity {
     private static final String WIFI_TAG = "WIFI_P2P";
     private static final String BLE_TAG = "BluetoothLE";
 
-    public static final String SENSOR_SERVICE_UUID = "0000aa-0000-1000-8000-00805f9b34fb";
-    public static final String READ_CHARACTERISTIC_UUID = "0000aa01-0000-1000-8000-00805f9b34fb";
-    public static final String FNP_CHARACTERISTIC_UUID = "0000aa02-0000-1000-8000-00805f9b34fb";
-    public static final String BATTERY_CHARACTERISTIC_UUID = "0000aa03-0000-1000-8000-00805f9b34fb";
+    private static final String SENSOR_SERVICE_UUID = "0000aa-0000-1000-8000-00805f9b34fb";
+    private static final String READ_CHARACTERISTIC_UUID = "0000aa01-0000-1000-8000-00805f9b34fb";
+    private static final String FNP_CHARACTERISTIC_UUID = "0000aa02-0000-1000-8000-00805f9b34fb";
+    private static final String BATTERY_CHARACTERISTIC_UUID = "0000aa03-0000-1000-8000-00805f9b34fb";
 
-    public static final String CONFIGURE_SERVICE_UUID = "000000bb-0000-1000-8000-00805f9b34fb";
-    public static final String CONFIGURE_WRITE_CHARACTERISTIC_UUID = "0000bb01-0000-1000-8000-00805f9b34fb";
-    public static final String CONFIGURE_NOTIFY_CHARACTERISTIC_UUID = "0000bb02-0000-1000-8000-00805f9b34fb";
+    private static final String CONFIGURE_SERVICE_UUID = "000000bb-0000-1000-8000-00805f9b34fb";
+    private static final String CONFIGURE_WRITE_CHARACTERISTIC_UUID = "0000bb01-0000-1000-8000-00805f9b34fb";
+    private static final String CONFIGURE_NOTIFY_CHARACTERISTIC_UUID = "0000bb02-0000-1000-8000-00805f9b34fb";
+
+    private static final String WELCOME_UTTERANCE_ID = "TTS#1";
+    private static final String FINGER_PLACE_UTTERANCE_ID = "TTS#2";
+    private static final String READING_UTTERANCE_ID = "TTS#3";
+    private static final String COMPLETION_UTTERANCE_ID = "TTS#4";
 
     private static final String FIELD_USER_ID = "USER_ID";
     private static final String FIELD_DEVICE_ID = "DEVICE_ID";
@@ -102,11 +133,22 @@ public class MainActivity extends AppCompatActivity {
     private static final String FIELD_WIFI_SSID = "WIFI_SSID";
     private static final String FIELD_WIFI_PASSWORD = "WIFI_PASSWORD";
 
-    private static final String configFilename = "deviceConfig.txt";
+    private static final String CONFIG_FILENAME = "deviceConfig.txt";
+    private static final String FINGER_PLACING_FILENAME = "finger_placing";
+    private static final String SCANNING_FILENAME = "scanning";
+
+    private static final long READ_TIMEOUT = 35000;
+
+    private static final int TEXT_COLOR_RED = android.R.color.holo_red_light;
+    private static final int TEXT_COLOR_GREEN = android.R.color.holo_green_dark;
+    private static final int TEXT_COLOR_BLACK = android.R.color.black;
 
     private static final int PERMISSIONS_ACCESS_FINE_LOCATION = 3;
     private static final int PERMISSIONS_ACCESS_WIFI_STATE = 4;
     private static final int PERMISSIONS_CHANGE_WIFI_STATE = 5;
+
+    private static final int FIRESTORE_READINGS_LIMIT = 500;
+    private static final String BATTERY_TAG = "Battery";
 
     private String userID;
     private String deviceID;
@@ -130,13 +172,36 @@ public class MainActivity extends AppCompatActivity {
     private WifiManager wifiManager;
     private ConnectivityManager connectivityManager;
 
+    private FirebaseFirestore firestore;
+    private ListenerRegistration dataRegistration;
+    private ListenerRegistration deviceRegistration;
+    private Map<String,Object> deviceData;
+
 //    private BroadcastReceiver wifiP2PReceiver;
 //    private WifiP2pManager wifiP2pManager;
 //    private WifiP2pManager.Channel channel;
 //    private IntentFilter intentFilter;
 //    private WifiP2pManager.PeerListListener peerListListener;
 
+    private ConstraintLayout mainLayout;
+    private ConstraintLayout videoLayout;
+    private VideoView mVideoView;
+    private ImageView ivBattery;
     private TextView tvInfo;
+    private TextView tvBattery;
+    private TextView tvTemperature;
+    private TextView tvSpo;
+    private TextView tvHeartRate;
+    private TextView tvStatus;
+    private CardView statusCard;
+
+    private boolean isReadingCompleted = false;
+    private boolean fingerNotPlaced = true;
+    private boolean stopVideo = false;
+
+    private Timer timer = new Timer();
+    private TextToSpeech textToSpeech;
+    private DocumentSnapshot dataDocument;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,7 +211,53 @@ public class MainActivity extends AppCompatActivity {
 
         displayName = "Nirog Scan";
 
+        mainLayout = findViewById(R.id.main_layout);
+        videoLayout = findViewById(R.id.main_layout2);
+        mVideoView = findViewById(R.id.videoView);
+        ivBattery = findViewById(R.id.iv_battery);
+        tvBattery = findViewById(R.id.tv_battery);
         tvInfo = findViewById(R.id.tv_info);
+        tvTemperature = findViewById(R.id.tv_temp_val);
+        tvSpo = findViewById(R.id.tv_spo_val);
+        tvHeartRate = findViewById(R.id.tv_hr_val);
+        tvStatus = findViewById(R.id.tv_status);
+        statusCard = findViewById(R.id.status_card);
+
+        mVideoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mediaPlayer) {
+                if(!stopVideo)
+                    mVideoView.start();
+            }
+        });
+        textToSpeech = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int status) {
+                if (status != TextToSpeech.ERROR) {
+                    textToSpeech.setLanguage(Locale.ENGLISH);
+                    textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override
+                        public void onStart(String s) {
+
+                        }
+
+                        @Override
+                        public void onDone(String s) {
+                            switch (s) {
+                                case FINGER_PLACE_UTTERANCE_ID:
+                                    if (!isReadingCompleted && fingerNotPlaced)
+                                        textToSpeech.speak("Please place your finger on the sensor", TextToSpeech.QUEUE_ADD, null, FINGER_PLACE_UTTERANCE_ID);
+                            }
+                        }
+
+                        @Override
+                        public void onError(String s) {
+
+                        }
+                    });
+                }
+            }
+        });
 
         bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = bluetoothManager.getAdapter();
@@ -156,10 +267,11 @@ public class MainActivity extends AppCompatActivity {
         if(!wifiManager.isWifiEnabled())
             wifiManager.setWifiEnabled(true);
         checkPermissions();
-//        readConfigData();
-        startBleServer();
 
+        readConfigData();
+//        startBleServer();
 
+//        uploadTestData();
 //        uploadData(10.0,20.0,30.0);
     }
     /* register the broadcast receiver with the intent values to be matched */
@@ -179,6 +291,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if(dataRegistration != null)
+            dataRegistration.remove();
+        if(deviceRegistration != null)
+            deviceRegistration.remove();
     }
 
     @Override
@@ -224,24 +345,96 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void uploadData(DocumentReference userDocumentReference, Double temperature, Double hr, Double spo) {
-        // Create a new user with a first and last name
+    private void uploadData(Float temperature, Float hr, Float spo) {
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+
+        Map<String,Object> previousReadings = (Map<String, Object>) dataDocument.get("previous_readings");
+        if(previousReadings == null){
+            previousReadings = new HashMap<>();
+        }
+
         Map<String, Object> reading = new HashMap<>();
-        reading.put("time", Calendar.getInstance().getTimeInMillis());
         reading.put("temperature", temperature);
-        reading.put("heart_rate", hr);
-        reading.put("spo", spo);
+        reading.put("heartrate", hr);
+        reading.put("oxygen", spo);
+        reading.put("uuid",deviceID);
+
+        Log.d(FIREBASE_TAG,"Readings in current document = " + previousReadings.size());
+        if(previousReadings.size() >= FIRESTORE_READINGS_LIMIT){
+            // Create a new document
+            previousReadings.clear();
+            previousReadings.put("" + Calendar.getInstance().getTimeInMillis(),reading);
+
+            Map<String,Object> newDocument = new HashMap<>();
+            newDocument.put("created","" + Calendar.getInstance().getTimeInMillis());
+            newDocument.put("uuid",deviceID);
+            newDocument.put("previous_readings",previousReadings);
+
+            firestore.collection("users").document(userID)
+                    .collection("Readings")
+                    .add(newDocument)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            Log.w(FIREBASE_TAG, "Added a document with id: " + documentReference.getId());
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(FIREBASE_TAG, "Error adding document", e);
+                        }
+                    });
+
+        }
+        else {
+            previousReadings.put("" + Calendar.getInstance().getTimeInMillis(), reading);
+            // Add a new document with a generated ID
+            firestore.collection("users").document(userID)
+                    .collection("Readings")
+                    .document(dataDocument.getId())
+                    .update("previous_readings", previousReadings)
+                    .addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void unused) {
+                            Log.w(FIREBASE_TAG, "Uploaded data!");
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@androidx.annotation.NonNull Exception e) {
+                            Log.w(FIREBASE_TAG, "Error updating document", e);
+                        }
+                    });
+        }
+    }
+
+    private void uploadTestData() {
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+
+        Map<String,Object> previousReadings = new HashMap<>();
+
+        for(int i=0;i<1000;i++) {
+            Random random = new Random();
+            float temperature = 93 + random.nextFloat()*15;
+            float hr = 40 + random.nextFloat()*100;
+            float spo = 93 + random.nextFloat()*7;
+            Map<String, Object> reading = new HashMap<>();
+            reading.put("temperature", temperature);
+            reading.put("heartrate", hr);
+            reading.put("oxygen", spo);
+            reading.put("uuid", "oKH3JylBOtMhMLMj3gPYmJSoBdJ3-01");
+            previousReadings.put("" + Calendar.getInstance().getTimeInMillis(),reading);
+        }
+
 
         // Add a new document with a generated ID
-        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
-        firestore.collection("users").document(userID)
-                .collection("devices").document(deviceID)
-                .collection("readings")
-                .add(reading)
-                .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+        firestore.document("/users/oKH3JylBOtMhMLMj3gPYmJSoBdJ3/Readings/jtGjfAQsplIjmzIgXJIp")
+                .update("previous_readings",previousReadings)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
-                    public void onSuccess(DocumentReference documentReference) {
-                        Log.d(FIREBASE_TAG, "DocumentSnapshot added with ID: " + documentReference.getId());
+                    public void onSuccess(Void unused) {
+                        Log.w(FIREBASE_TAG, "Uploaded data!");
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
@@ -252,8 +445,99 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
+    private void fetchLatestDataDocument(){
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+        dataRegistration = firestore.collection("users").document(userID)
+                .collection("Readings")
+                .whereEqualTo("uuid",deviceID)
+                .orderBy("created", Query.Direction.DESCENDING).limit(1)
+                .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                    @Override
+                    public void onEvent(@Nullable QuerySnapshot snapshot, @Nullable FirebaseFirestoreException e) {
+                        if (e != null) {
+                            Log.w(FIREBASE_TAG, "Listen failed.", e);
+                            return;
+                        }
+
+                        if (snapshot != null) {
+                            Log.d(FIREBASE_TAG, "Current data: " + snapshot.getMetadata());
+                            for (DocumentSnapshot document : snapshot.getDocuments()) {
+                                Log.d(FIREBASE_TAG, document.getId());
+                                dataDocument = document;
+                            }
+                            if(bluetoothAdapter.isEnabled()){
+                                if(btGatt == null)
+                                    startBleScan();
+                            }
+                            else {
+                                //TODO: Enable Bluetooth
+                            }
+                        } else {
+                            Log.d(FIREBASE_TAG, "Current data: null");
+                        }
+                    }
+                });
+    }
+
+
+    private void uploadDeviceDetails() {
+        Map<String, Object> deviceDetails = new HashMap<>();
+        deviceDetails.put(FIELD_DEVICE_ID, deviceID);
+        deviceDetails.put(FIELD_FCM_TOKEN, FCMtoken);
+        deviceDetails.put(FIELD_DISPLAY_NAME, displayName);
+        deviceDetails.put(FIELD_WIFI_SSID, wifiSSID);
+        deviceDetails.put(FIELD_WIFI_PASSWORD, wifiPassword);
+
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+        firestore.collection("users").document(userID)
+                .collection("devices").document(deviceID)
+                .set(deviceDetails)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void mVoid) {
+                        Log.d(FIREBASE_TAG, "DocumentSnapshot written successfully");
+                        saveConfigData();
+                        notifyClient("COMPLETED");
+                        printOnScreen("Established connection to Database!");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@androidx.annotation.NonNull Exception e) {
+                        Log.w(FIREBASE_TAG, "Error adding document", e);
+                        notifyClient("UPLOAD_FAIL");
+                    }
+                });
+    }
+
+    private void fetchDeviceDetails(){
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+        deviceRegistration = firestore.collection("users").document(userID)
+                .collection("devices").document(deviceID)
+                .addSnapshotListener(new EventListener<DocumentSnapshot>() {
+                    @Override
+                    public void onEvent(@Nullable DocumentSnapshot snapshot,
+                                        @Nullable FirebaseFirestoreException e) {
+                        if (e != null) {
+                            Log.w(FIREBASE_TAG, "Listen failed.", e);
+                            return;
+                        }
+
+                        if (snapshot != null && snapshot.exists()) {
+                            Log.d(FIREBASE_TAG, "Current data: " + snapshot.getData());
+                            deviceData = snapshot.getData();
+                            //TODO: use the data
+                            fetchLatestDataDocument();
+                        } else {
+                            Log.d(FIREBASE_TAG, "Current data: null");
+                        }
+                    }
+                });
+
+    }
+
     private void saveConfigData() {
-        File file1 = new File(getApplicationContext().getFilesDir(), configFilename);
+        File file1 = new File(getApplicationContext().getFilesDir(), CONFIG_FILENAME);
         try (FileOutputStream fos = new FileOutputStream(file1, false)) {
             JSONObject jsonObject = new JSONObject();
             jsonObject.put(FIELD_DEVICE_ID, deviceID);
@@ -280,7 +564,7 @@ public class MainActivity extends AppCompatActivity {
         Context context = getApplicationContext();
         FileInputStream fis;
         try {
-            fis = context.openFileInput(configFilename);
+            fis = context.openFileInput(CONFIG_FILENAME);
             InputStreamReader inputStreamReader =
                     new InputStreamReader(fis, StandardCharsets.UTF_8);
 
@@ -293,10 +577,28 @@ public class MainActivity extends AppCompatActivity {
                 deviceID = details.getString(FIELD_DEVICE_ID);
                 FCMtoken = details.getString(FIELD_FCM_TOKEN);
                 displayName = details.getString(FIELD_DISPLAY_NAME);
+                wifiSSID = details.getString(FIELD_WIFI_SSID);
+                wifiPassword = details.getString(FIELD_WIFI_PASSWORD);
+                //TODO: check if the details are valid
+                //connect to wifi
+                if(wifiManager.isWifiEnabled()){
+                    Log.d(CONFIG_TAG,"WiFi is Enabled!");
+                    NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+                    if(networkInfo!=null && networkInfo.isConnected()){
+                        Log.d(CONFIG_TAG,"WiFi is Connected!");
+                        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+                        Log.d(CONFIG_TAG,"WiFi is Connected to " + wifiInfo.getSSID() + " but wifiSSID is " + wifiSSID);
+                        if(wifiInfo.getSSID().equals("\"" + wifiSSID + "\"")){
+                            Log.d(CONFIG_TAG,"WiFi is Connected to " + wifiSSID);
+                            printOnScreen("Connected to WiFi");
+                            fetchDeviceDetails();
+                        }
+                    }
+                }
             }
         } catch (FileNotFoundException e){
             Log.e(CONFIG_TAG,"Config file does not exist!");
-            tvInfo.setText("Looks like you haven't configured the device.\nPlease configure from My NirogScan app!");
+            printOnScreen("Looks like you haven't configured the device.\nPlease configure from My NirogScan app!");
             startBleServer();
         }
         catch (IOException | JSONException e) {
@@ -422,12 +724,7 @@ public class MainActivity extends AppCompatActivity {
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w(BLE_TAG, "Successfully disconnected from " + deviceAddress);
                     gatt.close();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvInfo.setText("Not connected to sensing device\nIf this state persists, please restart NirogScan");
-                        }
-                    });
+                    printOnScreen("Not connected to sensing device\nIf this state persists, please restart NirogScan");
                 }
             } else {
                 Log.w(BLE_TAG, "Error " + status + " encountered for " + deviceAddress + "! Disconnecting...");
@@ -489,12 +786,9 @@ public class MainActivity extends AppCompatActivity {
                         case  FNP_CHARACTERISTIC_UUID:
                             btChar = gatt.getService(UUID.fromString(SENSOR_SERVICE_UUID)).getCharacteristic(UUID.fromString(READ_CHARACTERISTIC_UUID));
                             gatt.setCharacteristicNotification(btChar,true);
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    tvInfo.setText("Connected to " + btGatt.getDevice().getName());
-                                }
-                            });
+                            // Start the reading process
+                            requestReading();
+                            printOnScreen("Connected to " + btGatt.getDevice().getName());
                             break;
                     }
                     break;
@@ -510,8 +804,237 @@ public class MainActivity extends AppCompatActivity {
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicChanged(gatt, characteristic);
             Log.i("BluetoothGattCallback", "Notify characteristic " + characteristic.getUuid() + ":\t" + characteristic.getStringValue(0));
-            //TODO: Implement notification logic
-//            btGatt.readCharacteristic(characteristic);
+            String message = "";
+            String data = characteristic.getStringValue(0);
+            Log.i("BluetoothGattCallback", "Read characteristic " + characteristic.getUuid() + ":\t" + data);
+
+            switch (characteristic.getUuid().toString()) {
+                case BATTERY_CHARACTERISTIC_UUID:
+                    Log.i("BluetoothReceive", "Read characteristic " + characteristic.getUuid() + ":\t" + byteToHex(characteristic.getValue()));
+                    // ESP battery
+                    final int batteryVal = characteristic.getValue()[0];
+
+                    // Android battery
+                    IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                    Intent batteryStatus = registerReceiver(null, ifilter);
+                    // Are we charging / charged?
+                    int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                    final boolean isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                            status == BatteryManager.BATTERY_STATUS_FULL;
+
+                    // How are we charging?
+                    int chargePlug = batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+                    final boolean usbCharge = chargePlug == BatteryManager.BATTERY_PLUGGED_USB;
+                    final boolean acCharge = chargePlug == BatteryManager.BATTERY_PLUGGED_AC;
+
+                    int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                    int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+
+                    final float batteryPct = level * 100 / (float)scale;
+
+//                    Log.d(BATTERY_TAG,"Battery level: " + level + ", Pecentage: " + batteryPct + ", Charging? " + isCharging + ", USB Charge? " + usbCharge + ", AC charge: " + acCharge);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            int currentBattery = batteryVal < batteryPct ? batteryVal : (int) batteryPct;
+                            tvBattery.setText(currentBattery + "%");
+                            if(currentBattery < 25)
+                                ivBattery.setImageResource(R.drawable.battery_one_bar);
+                            else if(currentBattery < 50)
+                                ivBattery.setImageResource(R.drawable.battery_two_bars);
+                            else if(currentBattery < 75)
+                                ivBattery.setImageResource(R.drawable.battery_three_bars);
+                            else
+                                ivBattery.setImageResource(R.drawable.battery_full);
+                        }
+                    });
+                    break;
+                case FNP_CHARACTERISTIC_UUID:
+                    Log.i("BluetoothReceive", "Read characteristic " + characteristic.getUuid() + ":\t" + byteToHex(characteristic.getValue()));
+                    if(characteristic.getValue()[0] == 1){
+                        timer = new Timer();
+                        timer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                isReadingCompleted = true;
+                                textToSpeech.stop();
+                                printOnScreen("Please place your finger on the sensor!");
+                                releasePlayer();
+                                initializePlayer(FINGER_PLACING_FILENAME);
+                            }
+                        },READ_TIMEOUT);
+
+                        fingerNotPlaced = false;
+                        textToSpeech.speak("Reading. Please Wait.", TextToSpeech.QUEUE_FLUSH,null,READING_UTTERANCE_ID);
+                        printOnScreen("Reading. Please Wait.");
+                        releasePlayer();
+                        initializePlayer(SCANNING_FILENAME);
+                    }
+                    else{
+                        fingerNotPlaced = true;
+                        if(!isReadingCompleted) {
+                            textToSpeech.speak("Please place your finger on the sensor", TextToSpeech.QUEUE_FLUSH, null, FINGER_PLACE_UTTERANCE_ID);
+                            printOnScreen("Please place your finger on the sensor!");
+                            releasePlayer();
+                            initializePlayer(FINGER_PLACING_FILENAME);
+                        }
+                        else {
+                            textToSpeech.stop();
+                            printOnScreen("Please place your finger on the sensor!");
+                            releasePlayer();
+                            initializePlayer(FINGER_PLACING_FILENAME);
+                        }
+                    }
+                    break;
+                case READ_CHARACTERISTIC_UUID:
+                    String[] recv_messages = data.split(",", 0);        // The received string is a csv
+                    Log.d("LENGTH OF SPLIT", recv_messages.length + "");
+                    if(recv_messages.length == 5) {
+                        timer.cancel();
+                        isReadingCompleted = true;
+                        releasePlayer();
+                        float temperature = Float.parseFloat(recv_messages[4]);
+                        float heart_rate = Float.parseFloat(recv_messages[0]);
+                        float spo = Float.parseFloat(recv_messages[2]);
+                        float oxy_prec = Float.parseFloat(recv_messages[3]), hr_prec = Float.parseFloat(recv_messages[1]);
+
+                        temperature = (temperature * 9f/5) + 32;
+
+
+                        final boolean isHealthy = !(temperature > 100) && !(temperature < 95) && !(spo < 95);
+//                        if(temperature > 100 || temperature < 95 || spo < 95){
+//                            runOnUiThread(new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    tvStatus.setText("You might be ill!");
+//                                    statusCard.setCardBackgroundColor(Color.RED);
+//                                }
+//                            });
+//                        }
+//                        else {
+//                            runOnUiThread(new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    tvStatus.setText("You are safe!");
+//                                    statusCard.setCardBackgroundColor(getResources().getColor(R.color.theme_green));
+//                                }
+//                            });
+//                        }
+
+
+                        // Trim floats for displaying
+                        DecimalFormat df = new DecimalFormat("0.0");
+                        df.setMaximumFractionDigits(1);
+                        final String heart_rate1 = df.format(heart_rate), spo1 = df.format(spo), temperature1 = df.format(temperature);
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                videoLayout.setVisibility(View.GONE);
+                                mainLayout.setVisibility(View.VISIBLE);
+
+                                tvHeartRate.setText(heart_rate1);
+                                tvSpo.setText(spo1);
+                                tvTemperature.setText(temperature1);
+
+                                if(isHealthy){
+                                    tvStatus.setText("You are safe!");
+                                    statusCard.setCardBackgroundColor(getResources().getColor(R.color.theme_green));
+                                }
+                                else {
+                                    tvStatus.setText("You might be ill!");
+                                    statusCard.setCardBackgroundColor(Color.RED);
+                                }
+                            }
+                        });
+
+
+                        textToSpeech.speak("Completed! Thank you for your time.", TextToSpeech.QUEUE_FLUSH, null, COMPLETION_UTTERANCE_ID);
+                        printOnScreen("Done!");
+
+                        uploadData(temperature,heart_rate,spo);
+                        if(!isHealthy){
+                            // TODO:Send Notification
+                        }
+                        // Upload on to the web and return after upload complete
+//                        uploadData(temperature,heart_rate,spo);
+
+                        // Instantiate the RequestQueue.
+//                        RequestQueue queue = Volley.newRequestQueue(this);
+//                        String url = "https://things.ubidots.com/api/v1.6/devices/esp?token=BBFF-qfdAOBNngUyWFyYXAnWK3yvyD6oO4i";
+//                        JSONObject jsonBody = new JSONObject();
+//                        jsonBody.put("temperature", temperature);
+//                        jsonBody.put("heartrate", heart_rate);
+//                        jsonBody.put("oxygen_level", spo);
+//                        final String requestBody = jsonBody.toString();
+//                        // Request a string response from the provided URL.
+//                        StringRequest stringRequest = new StringRequest(Request.Method.POST, url,
+//                                new Response.Listener<String>() {
+//                                    @Override
+//                                    public void onResponse(String response) {
+//                                        Log.i("HttpResponse", "Response is: "+ response);
+//                                        Toast.makeText(getApplicationContext(),"Uploaded to the web!",Toast.LENGTH_SHORT).show();
+////                                        finish();
+//                                    }
+//                                }, new Response.ErrorListener() {
+//                            @Override
+//                            public void onErrorResponse(VolleyError error) {
+//                                Log.i("HttpResponse", "That didn't work!");
+//                                error.printStackTrace();
+//                                Toast.makeText(getApplicationContext(),"Failed to upload to the web. Cached.",Toast.LENGTH_SHORT).show();
+////                                finish();
+//                            }
+//                        }){
+//                            @Override
+//                            public String getBodyContentType() {
+//                                return "application/json; charset=utf-8";
+//                            }
+//
+//                            @Override
+//                            public Map<String, String> getHeaders() throws AuthFailureError {
+//                                return super.getHeaders();
+//                            }
+//
+//                            @Override
+//                            public byte[] getBody() {
+//                                try {
+//                                    return requestBody == null ? null : requestBody.getBytes("utf-8");
+//                                } catch (UnsupportedEncodingException uee) {
+//                                    VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
+//                                    return null;
+//                                }
+//                            }
+//
+//                            @Override
+//                            protected Response<String> parseNetworkResponse(NetworkResponse response) {
+//                                String responseString = "";
+//                                if (response != null) {
+//                                    responseString = String.valueOf(response.statusCode);
+//                                    // can get more details such as response.headers
+//                                }
+//                                return Response.success(responseString, HttpHeaderParser.parseCacheHeaders(response));
+//                            }
+//                        };
+//
+//                        // Add the request to the RequestQueue.
+//                        queue.add(stringRequest);
+
+                        try {
+                            Thread.sleep(5000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+//                        finish();
+                        // TODO: start process again
+                        requestReading();
+                    }
+                    else {
+                        Log.e("Received","Invalid format");
+                    }
+                    break;
+            }
+            //            btGatt.readCharacteristic(characteristic);
         }
 
 
@@ -597,21 +1120,12 @@ public class MainActivity extends AppCompatActivity {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     Log.w(BLE_TAG, deviceAddress + " connected to you!");
                     myNirogScanDevice = device;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvInfo.setText("Nirog Scan is being configured...");
-                        }
-                    });
+                    printOnScreen("Nirog Scan is being configured...");
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w(BLE_TAG, "Successfully disconnected from " + deviceAddress);
                     server.close();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvInfo.setText("Nirog Scan configured!");
-                        }
-                    });
+                    fetchDeviceDetails();
+                    printOnScreen("Nirog Scan configured!");
                 }
             } else {
                 Log.w(BLE_TAG, "Error " + status + " encountered for " + deviceAddress + "! Disconnecting...");
@@ -635,16 +1149,20 @@ public class MainActivity extends AppCompatActivity {
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value);
             String message = new String(value,StandardCharsets.UTF_8);
             Log.d(BLE_TAG,"Received: " + message);
-            String[] data = message.split(",");
-            userID = data[0];
-            deviceID = data[1];
-            FCMtoken = data[2];
-            displayName = data[3];
-            wifiSSID = data[4];
-            wifiPassword = data[5];
-            server.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset,"Success!".getBytes(StandardCharsets.UTF_8));
-            connectToWifi(wifiSSID,wifiPassword);
-
+            if(message.equals("RETRY")){
+                uploadDeviceDetails();
+            }
+            else {
+                String[] data = message.split(",");
+                userID = data[0];
+                deviceID = data[1];
+                FCMtoken = data[2];
+                displayName = data[3];
+                wifiSSID = data[4];
+                wifiPassword = data[5];
+                server.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, "Success!".getBytes(StandardCharsets.UTF_8));
+                connectToWifi(wifiSSID, wifiPassword);
+            }
         }
 
         @Override
@@ -663,6 +1181,15 @@ public class MainActivity extends AppCompatActivity {
             Log.d(BLE_TAG,"Notification sent!");
         }
     };
+
+    private void printOnScreen(String s) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tvInfo.setText(s);
+            }
+        });
+    }
 
     AdvertiseCallback advertiseCallback = new AdvertiseCallback() {
         @Override
@@ -834,15 +1361,8 @@ public class MainActivity extends AppCompatActivity {
                     WifiInfo wifiInfo = wifiManager.getConnectionInfo();
                     Log.d(BLE_TAG, "Connected to " + wifiInfo.getSSID());
                     Toast.makeText(getApplicationContext(), "Connected to " + wifiInfo.getSSID() + "!", Toast.LENGTH_LONG).show();
-                    saveConfigData();
-                    server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
-                            .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID))
-                            .setValue("CONNECTED");
-                    server.notifyCharacteristicChanged(
-                            myNirogScanDevice,
-                            server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
-                                    .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID)),
-                            true);
+                    notifyClient("CONNECTED");
+                    uploadDeviceDetails();
                     unregisterReceiver(broadcastReceiver);
                 }
             }
@@ -858,14 +1378,7 @@ public class MainActivity extends AppCompatActivity {
                             isConnecting = false;
                             Log.d(BLE_TAG,"Authentication Failed");
 //                            Toast.makeText(getApplicationContext(),"Connected to " + network.toString() + "!",Toast.LENGTH_LONG).show();
-                            server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
-                                    .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID))
-                                    .setValue("AUTH_FAIL");
-                            server.notifyCharacteristicChanged(
-                                    myNirogScanDevice,
-                                    server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
-                                            .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID)),
-                                    true);
+                            notifyClient("AUTH_FAIL");
                             unregisterReceiver(broadcastReceiver);
                         }
                         break;
@@ -876,4 +1389,72 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     };
+
+    private void notifyClient(String message) {
+        server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
+                .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID))
+                .setValue(message);
+        server.notifyCharacteristicChanged(
+                myNirogScanDevice,
+                server.getService(UUID.fromString(CONFIGURE_SERVICE_UUID))
+                        .getCharacteristic(UUID.fromString(CONFIGURE_NOTIFY_CHARACTERISTIC_UUID)),
+                true);
+    }
+
+    private void initializePlayer(final String mediaName) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Uri videoUri = getMedia(mediaName);
+                mVideoView.setVideoURI(videoUri);
+                mVideoView.start();
+                stopVideo = false;
+            }
+        });
+    }
+
+    private void releasePlayer() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mVideoView.stopPlayback();
+                stopVideo = true;
+            }
+        });
+    }
+
+    private Uri getMedia(String mediaName) {
+        return Uri.parse("android.resource://" + getPackageName() +
+                "/raw/" + mediaName);
+    }
+
+    private void requestReading(){
+        textToSpeech.speak("Welcome to Neerog Scan App!",TextToSpeech.QUEUE_FLUSH,null,WELCOME_UTTERANCE_ID);
+        //textToSpeech.speak("Please place your finger on the sensor",TextToSpeech.QUEUE_ADD,null,FINGER_PLACE_UTTERANCE_ID);
+        printOnScreen("Device Ready to take readings!");
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mainLayout.setVisibility(View.GONE);
+                videoLayout.setVisibility(View.VISIBLE);
+            }
+        });
+        initializePlayer(FINGER_PLACING_FILENAME);
+
+        // A write starts the reading process and when the process is done, the on
+        byte[] writeValue = {1};
+        btGatt.getService(UUID.fromString(SENSOR_SERVICE_UUID)).getCharacteristic(UUID.fromString(READ_CHARACTERISTIC_UUID)).setValue(writeValue);
+        btGatt.writeCharacteristic(
+                btGatt.getService(UUID.fromString(SENSOR_SERVICE_UUID))
+                        .getCharacteristic(UUID.fromString(READ_CHARACTERISTIC_UUID)));
+    }
+
+    private String byteToHex(byte[] bytes){
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X", b));
+        }
+
+        return sb.toString();
+    }
 }
